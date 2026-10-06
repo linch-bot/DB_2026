@@ -108,3 +108,95 @@
 - `amount` — сума платежу (`> 0`).
 - `payment_status` — статус транзакції (`pending`, `completed`, `failed`, `refunded`).
 - `paid_at` — дата та час фактичної оплати.
+
+---
+
+## 3. Опис зв'язків між сутностями та кардинальностей
+
+1. **`Category` — `Product` (Один до багатьох / `1 : N`):**
+   - _Пояснення_ Кожна категорія може містити багато різних товарів (або тимчасово жодного, якщо категорія щойно створена), але кожен конкретний товар обов'язково належить рівно до однієї основної категорії.
+2. **`Customer` — `Order` (Один до багатьох / `1 : N`):**
+   - _Пояснення_ Зареєстрований клієнт може оформити нуль, одне або багато замовлень протягом часу користування магазином. Кожне замовлення оформлюється рівно одним конкретним клієнтом.
+3. **`Order` — `Product` через асоціативну сутність `OrderItem` (Багато до багатьох / `M : N`, розкладений на два зв'язки `1 : N`):**
+   - _Пояснення_ Одне замовлення складається щонайменше з однієї або багатьох товарних позицій (`OrderItem`), а кожен товар може фігурувати у багатьох позиціях різних замовлень (або не бути замовленим ще жодного разу). Асоціативна сутність `OrderItem` зберігає кількість (`quantity`) та фіксовану ціну (`unit_price`) конкретного товару в конкретному замовленні.
+4. **`Order` — `Payment` (Один до одного / `1 : 1`):**
+   - _Пояснення_ Кожному замовленню відповідає один підсумковий платіж (до моменту оплати запис платежу може перебувати у статусі `pending`), і кожен платіж оплачує рівно одне замовлення.
+
+---
+
+## 4. Концептуальна ER-діаграма
+
+Візуальне представлення сутностей, атрибутів, первинних/зовнішніх ключів та кардинальностей зв'язків:
+
+```mermaid
+erDiagram
+    CUSTOMER ||--o{ ORDER : "places (1:N)"
+    CATEGORY ||--o{ PRODUCT : "contains (1:N)"
+    ORDER ||--|{ ORDER_ITEM : "includes (1:N)"
+    PRODUCT ||--o{ ORDER_ITEM : "ordered_in (1:N)"
+    ORDER ||--o| PAYMENT : "paid_by (1:1)"
+
+    CUSTOMER {
+        int customer_id PK
+        varchar full_name
+        varchar email UK
+        varchar phone
+        varchar city
+        timestamp created_at
+    }
+
+    CATEGORY {
+        int category_id PK
+        varchar name UK
+        text description
+    }
+
+    PRODUCT {
+        int product_id PK
+        int category_id FK
+        varchar name
+        varchar legacy_sku
+        numeric price
+        int stock_quantity
+        varchar tags
+        varchar supplier_name
+        varchar supplier_phone
+        varchar supplier_email
+    }
+
+    ORDER {
+        int order_id PK
+        int customer_id FK
+        timestamp order_date
+        varchar status
+        varchar shipping_address
+        varchar shipping_city
+        numeric city_delivery_tariff
+        numeric total_amount
+    }
+
+    ORDER_ITEM {
+        int order_id PK, FK
+        int product_id PK, FK
+        varchar product_name
+        int quantity
+        numeric unit_price
+    }
+
+    PAYMENT {
+        int payment_id PK
+        int order_id FK, UK
+        varchar payment_method
+        numeric amount
+        varchar payment_status
+        timestamp paid_at
+    }
+```
+
+---
+
+## 5. Припущення та обмеження моделі
+
+1. **Фіксація історичної ціни:** Ціна товару в каталозі (`Product.price`) може змінюватися з часом, тому на момент оформлення замовлення вартість одиниці товару обов'язково копіюється в `OrderItem.unit_price`.
+2. **Унікальність позиції в межах замовлення:** Один і той самий товар (`product_id`) не може дублюватися двома окремими рядками в одному замовленні (`order_id`) — замість цього збільшується атрибут `quantity` (забезпечується складеним первинним ключем `(order_id, product_id)`).
+3. **Обмеження на кількість та суми:** Усі грошові поля (`price`, `unit_price`, `total_amount`, `amount`) зберігаються з фіксованою точністю до копійок (`NUMERIC(10, 2)`) і не можуть бути від'ємними.
