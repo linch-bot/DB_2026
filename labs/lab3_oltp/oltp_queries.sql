@@ -75,3 +75,62 @@ FROM orders o
 JOIN order_items oi ON o.order_id = oi.order_id
 WHERE o.order_id = 7;
 
+-- ============================================================================
+-- ЧАСТИНА 3: ОНОВЛЕННЯ ІСНУЮЧИХ ДАНИХ (UPDATE ... SET ... WHERE) ТА ПЕРЕВІРКА
+-- ============================================================================
+
+-- Запит 3.1: Зменшення залишку товару на складі та акційне зниження ціни для миші Logitech (product_id = 9)
+-- Попередня перевірка рядка перед UPDATE
+SELECT product_id, name, price, stock_quantity
+FROM products
+WHERE legacy_sku = 'SKU-ACC-002';
+
+UPDATE products
+SET price = 4199.00,
+    stock_quantity = stock_quantity - 1
+WHERE legacy_sku = 'SKU-ACC-002';
+
+-- Перевірка результату після UPDATE
+SELECT product_id, name, price, stock_quantity
+FROM products
+WHERE legacy_sku = 'SKU-ACC-002';
+
+-- Запит 3.2: Оновлення статусу замовлення №5 з 'pending' на 'paid' та фіксація оплати в таблиці payments
+UPDATE orders
+SET status = 'paid'
+WHERE order_id = 5 AND status = 'pending';
+
+UPDATE payments
+SET payment_status = 'completed',
+    paid_at = '2026-10-05 16:30:00'
+WHERE order_id = 5;
+
+-- Перевірка оновленого замовлення №5 та його платежу
+SELECT o.order_id, o.status AS order_status, p.payment_status, p.amount, p.paid_at
+FROM orders o
+JOIN payments p ON o.order_id = p.order_id
+WHERE o.order_id = 5;
+
+-- ============================================================================
+-- ЧАСТИНА 4: БЕЗПЕЧНЕ ВИДАЛЕННЯ ДАНИХ (DELETE FROM ... WHERE) ТА ПЕРЕВІРКА
+-- ============================================================================
+
+-- Запит 4.1: Безпечне видалення тестової позиції та замовлення №7 (до його оплати)
+-- Крок 1: Попередня перевірка через SELECT з тією ж умовою WHERE
+SELECT order_id, product_id, product_name, quantity
+FROM order_items
+WHERE order_id = 7 AND product_id = 9;
+
+-- Крок 2: Видалення позиції замовлення
+DELETE FROM order_items
+WHERE order_id = 7 AND product_id = 9;
+
+-- Крок 3: Видалення самого неоплаченого замовлення №7
+DELETE FROM orders
+WHERE order_id = 7 AND status = 'pending';
+
+-- Крок 4: Перевірка за допомогою SELECT, що замовлення №7 та його позиції видалені
+SELECT order_id, customer_id, status, total_amount
+FROM orders
+WHERE order_id = 7;
+
