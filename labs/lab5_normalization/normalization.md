@@ -194,3 +194,240 @@ CREATE TABLE product_tags (
     PRIMARY KEY (product_id, tag_name)
 );
 
+ALTER TABLE products
+    ADD COLUMN supplier_id INTEGER REFERENCES suppliers(supplier_id),
+    DROP COLUMN tags,
+    DROP COLUMN supplier_name,
+    DROP COLUMN supplier_phone,
+    DROP COLUMN supplier_email;
+```
+
+**Перероблений дизайн `products` у 3NF:**
+
+```sql
+CREATE TABLE products (
+    product_id     SERIAL PRIMARY KEY,
+    category_id    INTEGER       NOT NULL REFERENCES categories(category_id),
+    supplier_id    INTEGER       NOT NULL REFERENCES suppliers(supplier_id),
+    name           VARCHAR(150)  NOT NULL,
+    legacy_sku     VARCHAR(50)   UNIQUE,
+    price          NUMERIC(10,2) NOT NULL CHECK (price > 0),
+    stock_quantity INTEGER       NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0)
+);
+```
+
+---
+
+### 4.2. Таблиця `order_items` (перехід до 2NF)
+
+**Оригінальний дизайн (Лабораторна №2):**
+
+```sql
+CREATE TABLE order_items (
+    order_id     INTEGER       NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+    product_id   INTEGER       NOT NULL REFERENCES products(product_id),
+    product_name VARCHAR(150)  NOT NULL,
+    quantity     INTEGER       NOT NULL CHECK (quantity > 0),
+    unit_price   NUMERIC(10,2) NOT NULL CHECK (unit_price > 0),
+    PRIMARY KEY (order_id, product_id)
+);
+```
+
+**Команда `ALTER TABLE` для зміни `order_items`:**
+
+```sql
+ALTER TABLE order_items
+    DROP COLUMN product_name;
+```
+
+**Перероблений дизайн `order_items` у 2NF / 3NF:**
+
+```sql
+CREATE TABLE order_items (
+    order_id   INTEGER       NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+    product_id INTEGER       NOT NULL REFERENCES products(product_id),
+    quantity   INTEGER       NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(10,2) NOT NULL CHECK (unit_price > 0),
+    PRIMARY KEY (order_id, product_id)
+);
+```
+
+---
+
+### 4.3. Таблиця `orders` (перехід до 3NF)
+
+**Оригінальний дизайн (Лабораторна №2):**
+
+```sql
+CREATE TABLE orders (
+    order_id             SERIAL PRIMARY KEY,
+    customer_id          INTEGER       NOT NULL REFERENCES customers(customer_id),
+    order_date           TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status               VARCHAR(30)   NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'paid', 'shipped', 'completed', 'cancelled')),
+    shipping_address     VARCHAR(255)  NOT NULL,
+    shipping_city        VARCHAR(80)   NOT NULL,
+    city_delivery_tariff NUMERIC(8,2)  NOT NULL DEFAULT 0.00 CHECK (city_delivery_tariff >= 0),
+    total_amount         NUMERIC(10,2) NOT NULL CHECK (total_amount >= 0)
+);
+```
+
+**Команди `CREATE TABLE` та `ALTER TABLE` для зміни `orders`:**
+
+```sql
+CREATE TABLE shipping_cities (
+    city_id         SERIAL PRIMARY KEY,
+    city_name       VARCHAR(80)  NOT NULL UNIQUE,
+    delivery_tariff NUMERIC(8,2) NOT NULL DEFAULT 0.00 CHECK (delivery_tariff >= 0)
+);
+
+ALTER TABLE orders
+    ADD COLUMN shipping_city_id INTEGER REFERENCES shipping_cities(city_id),
+    DROP COLUMN shipping_city,
+    DROP COLUMN city_delivery_tariff;
+```
+
+**Перероблений дизайн `orders` у 3NF:**
+
+```sql
+CREATE TABLE orders (
+    order_id         SERIAL PRIMARY KEY,
+    customer_id      INTEGER       NOT NULL REFERENCES customers(customer_id),
+    shipping_city_id INTEGER       NOT NULL REFERENCES shipping_cities(city_id),
+    order_date       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status           VARCHAR(30)   NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'paid', 'shipped', 'completed', 'cancelled')),
+    shipping_address VARCHAR(255)  NOT NULL,
+    total_amount     NUMERIC(10,2) NOT NULL CHECK (total_amount >= 0)
+);
+```
+
+---
+
+## 5. Оновлена ER-діаграма бази даних після нормалізації (3NF)
+
+Наведена нижче ER-діаграма відображає всі 9 нормалізованих таблиць у `3NF` та зв'язки між ними:
+
+```mermaid
+erDiagram
+    customers ||--o{ orders : "customer_id (1:N)"
+    shipping_cities ||--o{ orders : "shipping_city_id (1:N)"
+    categories ||--o{ products : "category_id (1:N)"
+    suppliers ||--o{ products : "supplier_id (1:N)"
+    products ||--o{ product_tags : "product_id (1:N)"
+    orders ||--|{ order_items : "order_id (1:N)"
+    products ||--o{ order_items : "product_id (1:N)"
+    orders ||--o| payments : "order_id (1:1)"
+
+    customers {
+        SERIAL customer_id PK
+        VARCHAR(120) full_name
+        VARCHAR(150) email UK
+        VARCHAR(30) phone UK
+        VARCHAR(80) city
+        TIMESTAMP created_at
+    }
+
+    categories {
+        SERIAL category_id PK
+        VARCHAR(100) name UK
+        TEXT description
+    }
+
+    suppliers {
+        SERIAL supplier_id PK
+        VARCHAR(120) name UK
+        VARCHAR(30) phone
+        VARCHAR(150) email UK
+    }
+
+    products {
+        SERIAL product_id PK
+        INTEGER category_id FK
+        INTEGER supplier_id FK
+        VARCHAR(150) name
+        VARCHAR(50) legacy_sku UK
+        NUMERIC(10_2) price
+        INTEGER stock_quantity
+    }
+
+    product_tags {
+        INTEGER product_id PK, FK
+        VARCHAR(50) tag_name PK
+    }
+
+    shipping_cities {
+        SERIAL city_id PK
+        VARCHAR(80) city_name UK
+        NUMERIC(8_2) delivery_tariff
+    }
+
+    orders {
+        SERIAL order_id PK
+        INTEGER customer_id FK
+        INTEGER shipping_city_id FK
+        TIMESTAMP order_date
+        VARCHAR(30) status
+        VARCHAR(255) shipping_address
+        NUMERIC(10_2) total_amount
+    }
+
+    order_items {
+        INTEGER order_id PK, FK
+        INTEGER product_id PK, FK
+        INTEGER quantity
+        NUMERIC(10_2) unit_price
+    }
+
+    payments {
+        SERIAL payment_id PK
+        INTEGER order_id FK, UK
+        VARCHAR(40) payment_method
+        NUMERIC(10_2) amount
+        VARCHAR(30) payment_status
+        TIMESTAMP paid_at
+    }
+```
+
+---
+
+## 6. Перевірка завантаження нормалізованої схеми в PostgreSQL
+
+Після виконання скрипту [`schema_3nf.sql`](./schema_3nf.sql) у pgAdmin 4 усі 9 таблиць успішно створені та заповнені тестовими даними без порушень обмежень цілісності.
+![alt text](image.png)
+
+### Таблиця `customers` (`SELECT * FROM customers;`)
+
+![alt text](image-1.png)
+
+### Таблиця `categories` (`SELECT * FROM categories;`)
+
+![alt text](image-2.png)
+
+### Таблиця `suppliers` (`SELECT * FROM suppliers;`)
+
+![alt text](image-3.png)
+
+### Таблиця `products` (`SELECT * FROM products;`)
+
+![alt text](image-4.png)
+
+### Таблиця `product_tags` (`SELECT * FROM product_tags;`)
+
+![alt text](image-5.png)
+
+### Таблиця `shipping_cities` (`SELECT * FROM shipping_cities;`)
+
+![alt text](image-6.png)
+
+### Таблиця `orders` (`SELECT * FROM orders;`)
+
+![alt text](image-7.png)
+
+### Таблиця `order_items` (`SELECT * FROM order_items;`)
+
+![alt text](image-8.png)
+
+### Таблиця `payments` (`SELECT * FROM payments;`)
+
+![alt text](image-9.png)
